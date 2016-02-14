@@ -11,7 +11,7 @@ copyright:           2016 Bombpersons
 category:            Game
 build-type:          Simple
 cabal-version:       >=1.10
-data-dir:            data
+data-files:          data/*.png
 
 executable HaskellAsteroids
   hs-source-dirs:      src
