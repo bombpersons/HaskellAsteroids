@@ -30,8 +30,10 @@ makeWorld wnd = do
   -- Load textures
   asteroidPath <- getDataFileName "data/asteroid.png"
   playerPath <- getDataFileName "data/player.png"
+  bulletPath <- getDataFileName "data/bullet.png"
   asteroidTex <- err $ textureFromFile asteroidPath Nothing
   playerTex <- err $ textureFromFile playerPath Nothing
+  bulletTex <- err $ textureFromFile bulletPath Nothing
 
   -- Make a bunch of asteroids.
   asteroids <- mapM (\dummy -> makeAsteroid asteroidTex) [1..10]
@@ -52,10 +54,11 @@ makeWorld wnd = do
                       wOldKeysDown = [],
                       wCurKeysDown = [],
                       wWorldRect = worldRect,
+                      wBulletTexture = bulletTex,
                       wPlayer = playerEnt,
                       wPlayerShootTimer = 0,
                       wAsteroids = asteroids,
-                      wBullets = []}
+                      wBullets = [] }
   return world
 
 main :: IO ()

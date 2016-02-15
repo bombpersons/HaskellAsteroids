@@ -18,17 +18,19 @@ data Entity = Entity {
 
 emptyEntity :: Entity
 emptyEntity = Entity {
-                eTexture = Nothing,
-                ePosition = Vec2f 0 0,
-                eRotation = 0,
-                eVelocity = Vec2f 0 0,
-                eRotationSpeed = 0
+                      eTexture = Nothing,
+                      ePosition = Vec2f 0 0,
+                      eRotation = 0,
+                      eVelocity = Vec2f 0 0,
+                      eRotationSpeed = 0
 }
 
 data World = World { wWindow           :: RenderWindow,
                      wOldKeysDown      :: [KeyCode],
                      wCurKeysDown      :: [KeyCode],
                      wWorldRect        :: FloatRect,
+
+                     wBulletTexture    :: Texture,
 
                      wPlayer           :: Entity,
                      wPlayerShootTimer :: Float,
@@ -79,30 +81,50 @@ turnLeftRightKeys acc w dt e@Entity{eRotationSpeed=v} = e{eRotationSpeed = newSp
 updateEntity :: World -> Float -> Entity -> Entity
 updateEntity = moveAtVelocity
 
-updatePlayer :: World -> Float -> Entity -> Entity
-updatePlayer world dt = moveAtVelocity world dt .
-                        moveBackAndForwardKeys 500 world dt .
-                        turnLeftRightKeys (pi*2) world dt
+updatePlayer :: Float -> World -> World
+updatePlayer dt w@World{wPlayer=player} = w{wPlayer=newPlayer}
+  where newPlayer = moveAtVelocity w dt .
+                    moveBackAndForwardKeys 500 w dt .
+                    turnLeftRightKeys (pi*2) w dt $ player
 
-playerShoot :: World -> Float -> Entity -> World
-playerShoot w@World{wBullets=bullets, wPlayerShootTimer=timer} dt p@Entity{ePosition=pPos, eRotation=pRot}
-  | worldIsKeyPressed w KeySpace && timer > 0 = w{wPlayerShootTimer=timer - dt}
-  | otherwise = w{wBullets=newBullet:bullets, wPlayerShootTimer = 1}
-  where newBullet = emptyEntity{ePosition = pPos, eRotation=pRot, eVelocity= flip multVec 200 . getForwardVecFromRotation $ pRot}
+newBullet :: World -> Vec2f -> Float -> Entity
+newBullet World{wBulletTexture=bulletTex} pos rot = emptyEntity{eTexture=Just bulletTex,
+                                                                ePosition=pos,
+                                                                eRotation=rot,
+                                                                eVelocity= flip multVec (-200) . getForwardVecFromRotation $ rot}
+
+playerShoot :: Float -> World -> World
+playerShoot dt w@World{wBullets=bullets, wPlayerShootTimer=timer, wPlayer=p@Entity{ePosition=pPos, eRotation=pRot}}
+  | timer > 0 = w{wPlayerShootTimer=timer - dt}
+  | worldIsKeyPressed w KeySpace = w{wBullets=newBullet w pPos pRot : bullets, wPlayerShootTimer = 1}
+  | otherwise = w
+
+updateAsteroid :: World -> Float -> Entity -> Entity
+updateAsteroid = moveAtVelocity
+
+updateAsteroids :: Float -> World -> World
+updateAsteroids dt w@World{wAsteroids=asteroids} = w{wAsteroids=newAsteroids}
+  where newAsteroids = fmap (updateAsteroid w dt) asteroids
+
+updateBullet :: World -> Float -> Entity -> Entity
+updateBullet = moveAtVelocity
+
+updateBullets :: Float -> World -> World
+updateBullets dt w@World{wBullets=bullets} = w{wBullets=newBullets}
+  where newBullets = fmap (updateBullet w dt) bullets
 
 collideBullets :: World -> World
 collideBullets world@World{wBullets=bullets} = foldr collideBullet world bullets
   where collideBullet e world = world
 
 updateWorld :: World -> Float -> World
-updateWorld w@World{wPlayer=player, wAsteroids=asteroids, wBullets=bullets} dt = worldAfterUpdate
+updateWorld w dt = foldl foldFunc w updateFuncs
   where
-    updatedPlayer = updatePlayer w dt player
-    updatedAsteroids = fmap (updateEntity w dt) asteroids
-    updatedBullets = fmap (updateEntity w dt) bullets
-    worldAfterUpdate = w{wPlayer=updatedPlayer, wAsteroids=updatedAsteroids, wBullets=updatedBullets}
-    --worldAfterShoot = playerShoot worldAfterUpdate dt updatedPlayer
-    --worldAfterBulletCollision = collideBullets worldAfterShoot
+    foldFunc world f = f world
+    updateFuncs = [updatePlayer dt,
+                   playerShoot dt,
+                   updateAsteroids dt,
+                   updateBullets dt]
 
 drawSpriteAtPos :: World -> Entity -> IO ()
 drawSpriteAtPos world@World{wWindow=wnd, wWorldRect=FloatRect wx wy ww wh} e@Entity{eTexture=t} =
@@ -121,6 +143,7 @@ drawSpriteAtPos world@World{wWindow=wnd, wWorldRect=FloatRect wx wy ww wh} e@Ent
               drawSprite wnd spr Nothing
 
 renderWorld :: World -> IO ()
-renderWorld world@World{wPlayer=player, wAsteroids=asteroids} = do
+renderWorld world@World{wPlayer=player, wAsteroids=asteroids, wBullets=bullets} = do
   mapM_ (drawSpriteAtPos world) asteroids
+  mapM_ (drawSpriteAtPos world) bullets
   drawSpriteAtPos world player
